@@ -37,6 +37,9 @@ work**. Never idle-wait.
 - **G0 — <name>**: <do X>. Gate: <verifiable check>.
 - **G1 — <name>**: <do X>. Gate: <verifiable check>.
 - …(advance one gate per session; on a gate pass, record real output in STATUS)
+- **Completion signal:** when EVERY gate has passed (real output proves it), write a line
+  `ALL-GATES-PASSED` to `STATUS.md`. The supervisor watches for this and stops the loop
+  (its "completion promise"). Never write it without real proof — it ends the run.
 
 ## Every cycle, DO exactly:
 1. Print health: brain/worker liveness (`tmux ls`, `ps`, GPU), current gate, any `NEEDS-USER`.

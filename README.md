@@ -51,6 +51,37 @@ Each of the [eight hard rules](skills/nested-autonomy/SKILL.md#eight-hard-rules-
 in the skill encodes a real failure the pattern was hardened against (SSH-drop job death, two-controller
 collisions, `pkill -f` self-kill, engine-incompatible "fixes", host-namespace orphan processes, …).
 
+## Prior art & how this differs
+
+This pattern builds on well-known ideas; it's a specific, hardened *shape* of them for **durable,
+human-supervised, mixed Claude + non-Claude (e.g. GPU) long jobs**.
+
+- **[Ralph-Wiggum loop](https://github.com/anthropics/claude-code/blob/main/plugins/ralph-wiggum/README.md)**
+  (Anthropic's official plugin) — a single in-session loop that re-feeds one prompt via a Stop hook until a
+  "completion promise", capped by `--max-iterations`. We **absorb** its two escape hatches (a completion
+  signal `ALL-GATES-PASSED` + a max-cycles cap in `supervisor.sh`) and its **fresh-context-per-cycle**
+  insight (each `claude -p` starts clean; STATUS carries the state → no context rot). We **differ** by
+  adding the Tier-1 human-supervised orchestrator, detached non-Claude workers, and full session-death
+  survival (headless + tmux, not just in-session) — so it fits multi-hour training jobs and tasks needing
+  occasional human judgment, which Ralph explicitly isn't for.
+- **[Subagents](https://code.claude.com/docs/en/agents) / [Agent Teams](https://code.claude.com/docs/en/agent-teams)
+  / dynamic Workflows** (native Claude Code) — parallel agents inside one session. Use those for in-session
+  parallel fan-out; use *this* when work must survive disconnects, run for hours, and include non-Claude
+  jobs. Different axis (durability + sequential-resume vs in-session parallelism). They compose — a Tier-2
+  cycle can spawn subagents/Workflows.
+- **[Multi-agent coordination patterns](https://claude.com/blog/multi-agent-coordination-patterns)** (Anthropic) —
+  the orchestrator-worker lineage our tiers map onto.
+- **[autonomous-agent-harness](https://github.com/affaan-m/everything-claude-code)** (ECC) — cron-triggered
+  isolated sessions bridged by persistent memory. A cron is an equally valid Tier-2 trigger to our bash
+  supervisor; same core idea — a persistent file (our STATUS) as the cross-session bridge.
+- **[Tmux-Orchestrator](https://github.com/absmartly/Tmux-Orchestrator)** — tmux-based multi-Claude orchestration.
+- **[cc-sdd](https://github.com/gotalab/cc-sdd)** — spec-driven long-running implementation; our STATUS is the
+  same "source-of-truth file" idea, generalized to any gated long task.
+
+**One-line positioning:** Ralph in a loop, but *tiered* — a human-supervised orchestrator over a headless
+self-correcting brain over detached GPU/long jobs, coordinated by one STATUS file, hardened with operational
+rules for runs that must not die on disconnect.
+
 ## Install
 
 Drop the skill into your Claude Code skills directory:

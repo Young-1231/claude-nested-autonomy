@@ -102,6 +102,35 @@ Templates live in `templates/` next to this file.
 - **Self-analyze:** Tier-1 does an honest review on results (vs baseline, explain surprises, note
   limitations) and writes it up; surfaces genuine forks to the human.
 
+## Relation to prior art (and when to use native features instead)
+This pattern stands on well-known ideas; use it when its specific shape (durable + human-supervised +
+mixed Claude/non-Claude jobs) fits, otherwise reach for a lighter native feature.
+- **Ralph-Wiggum loop** (Anthropic's official `ralph-wiggum` plugin): a single in-session loop that
+  re-feeds one prompt via a Stop hook until a "completion promise" string, capped by `--max-iterations`.
+  We borrow its two escape hatches — a **completion signal** (`ALL-GATES-PASSED` in STATUS) and a
+  **max-cycles cap** — and its **fresh-context-per-cycle** insight (each `claude -p` starts clean;
+  STATUS carries state, so no context rot). We differ by adding the **Tier-1 human-supervised
+  orchestrator** + **detached non-Claude workers** + **survives full session death** (headless+tmux,
+  not just in-session) — so it suits long GPU/training jobs and tasks that need occasional human judgment,
+  which Ralph explicitly is not for.
+- **Subagents / Agent Teams / dynamic Workflows** (native Claude Code): parallel agents inside ONE
+  session sharing context/task-list. Use those for **parallel fan-out** within a session. Use THIS
+  pattern instead when work must **survive disconnects, run for hours, and include non-Claude long jobs**
+  (training/eval) — a different axis (durability + sequential-resume, not in-session parallelism). They compose:
+  a Tier-2 cycle can itself spawn subagents/Workflows.
+- **Cron-triggered harnesses** (e.g. ECC `autonomous-agent-harness`): scheduled isolated sessions bridged
+  by persistent memory. Our `supervisor.sh` bash-loop is one trigger; a cron is an equally valid Tier-2
+  trigger when cadence is fixed. Same core idea: **a persistent file (our STATUS) as the cross-session bridge**.
+- **Spec-driven harnesses** (cc-sdd, plan→work→review): our STATUS is the same "source-of-truth file"
+  notion, generalized from coding to any long task with verifiable gates.
+- **"Always give the agent a way to verify"** (Boris Cherny's rule for Ralph): our per-gate verifiable
+  acceptance check is exactly this — the loop advances only on real, checkable output.
+
+## Cost: tier your models
+Frontier model for Tier-1 reasoning/analysis and gate decisions; a **cheaper model for Tier-2 cycles and
+batch sub-work** (e.g. distillation/data-gen) — most token volume should sit on the cheap tier. Pass the
+model explicitly to `claude -p` (e.g. `--model sonnet`) for the brain / batch jobs.
+
 ## Pacing (cache-aware)
 The model prompt cache has a ~5-minute TTL. For Tier-1 self-paced wakeups: stay under ~270s when
 actively polling external state; jump to 1200–1800s when genuinely idle (one cache miss buys a
