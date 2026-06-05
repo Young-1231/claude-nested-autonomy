@@ -1,140 +1,198 @@
-# claude-nested-autonomy
+<div align="center">
 
-A Claude Code **skill** for driving long-running, multi-hour autonomous tasks with a
-**3-tier nested-Claude loop** — self-driving, self-correcting, self-monitoring, self-analyzing —
-that **survives SSH/session drops** and **fixes its own failures**.
+# 🪆 claude-nested-autonomy
 
-Battle-tested driving a real **7B GRPO video-RL** project (multi-day training, dozens of crash→fix→resume
-cycles) end-to-end with minimal human input.
+### A Claude Code skill that drives **multi-hour autonomous tasks** with a 3-tier nested-Claude loop — and keeps going after your laptop sleeps.
 
+**Self-driving · self-correcting · self-monitoring · self-analyzing.**
+Survives SSH drops. Fixes its own crashes. Pings you only for real decisions.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-Skill-d97757?logo=anthropic&logoColor=white)](https://code.claude.com)
+[![Status](https://img.shields.io/badge/status-battle--tested-success)](#-origin)
+[![Skill](https://img.shields.io/badge/type-agent%20skill-8957e5)](skills/nested-autonomy/SKILL.md)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/Young-1231/claude-nested-autonomy/pulls)
+![GitHub stars](https://img.shields.io/github/stars/Young-1231/claude-nested-autonomy?style=social)
+
+</div>
+
+---
+
+> **TL;DR** — Ralph-in-a-loop, but **tiered**: a human-supervised orchestrator over a headless
+> self-correcting brain over detached GPU/long jobs, all coordinated by **one `STATUS.md` file**,
+> hardened with operational rules earned from a multi-day 7B GRPO training run.
+
+## 📑 Contents
+- [🤔 The problem](#-the-problem)
+- [🏗️ Architecture](#️-architecture)
+- [✨ What makes it work](#-what-makes-it-work)
+- [🚀 Quickstart](#-quickstart)
+- [🛡️ The 8 hard rules](#️-the-8-hard-rules)
+- [🧬 Self-X mapping](#-self-x-mapping)
+- [🔀 Prior art & positioning](#-prior-art--positioning)
+- [📁 Repo layout](#-repo-layout)
+- [⚠️ Caveats](#️-caveats)
+
+## 🤔 The problem
+
+A single interactive Claude session **can't** babysit a 12-hour training run:
+
+| It… | …so this pattern |
+| --- | --- |
+| 💀 dies on SSH / session drop | pushes execution to **headless `claude -p` + tmux** |
+| ⏳ blocks on every step | splits **decide/analyze** (you) from **execute/fix** (the brain) |
+| 🪫 can't both charge ahead *and* reflect for the human | gives each job its **own loop & time scale** |
+| 🧠 rots its context over hours | runs each cycle in a **fresh `claude -p`**, state carried by `STATUS.md` |
+
+## 🏗️ Architecture
+
+```mermaid
+flowchart TB
+    H["👤 Human"]
+    subgraph T1 ["🧭 Tier 1 · Orchestrator — interactive Claude you, /loop"]
+        T1a["direct · analyze · decide · steer · commit at gates"]
+    end
+    subgraph T2 ["🧠 Tier 2 · Driver brain — headless claude -p in a tmux bash loop"]
+        T2a["one action per cycle · diagnose → fix → retry · fresh context"]
+    end
+    subgraph T3 ["⚙️ Tier 3 · Workers — detached jobs: train / eval / build"]
+        T3a["tmux + setsid · checkpoint + resume · just run and save"]
+    end
+    S[("📋 STATUS.md — the only coordination bus")]
+    H -.->|real forks only| T1
+    T1 --> T2 --> T3
+    T1 <--> S
+    T2 <--> S
+    T3 -.->|writes results| S
+    style T1 fill:#dbe9ff,stroke:#1f6feb,color:#0a3069
+    style T2 fill:#ffe0d6,stroke:#d97757,color:#7a2e12
+    style T3 fill:#d7f0dd,stroke:#2da44e,color:#0f5026
+    style S fill:#ece0fb,stroke:#8957e5,color:#3b1f6b
 ```
-┌ Tier 1 — Orchestrator (interactive Claude + human) ── seconds–min, human-facing ─┐
-│  directs · analyzes results · decides · steers via STATUS · surfaces real forks   │
-│  ┌ Tier 2 — Driver / "brain" (headless `claude -p`, restarted by a bash loop) ──┐ │
-│  │  one action/cycle · diagnose→fix→retry · writes real output to STATUS · exits │ │
-│  │  ┌ Tier 3 — Workers (detached jobs: train / eval / build / download) ──────┐ │ │
-│  │  │  tmux + setsid nohup · checkpoint + resume · just run & save            │ │ │
-│  │  └────────────────────────────────────────────────────────────────────────┘ │ │
-│  └──────────────────────────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
 
-## The problem it solves
+> Going **down** a tier: ⏱️ longer time scale, 🤖 more autonomy, 🙋 less human.
+> Tiers 1 & 2 are **both Claude** (that's the *nesting*); Tier 3 is usually non-Claude long jobs
+> (a training run, an eval) — but can be more `claude -p` sub-agents if the work is itself agentic.
 
-A single interactive Claude session can't drive a 12-hour training run: it dies on disconnect,
-it blocks on every step, and it can't both "charge ahead and fix things" and "reflect coolly for
-the human" at once. This pattern splits those concerns across three nested loops:
+## ✨ What makes it work
 
-- **Tier 1 (Orchestrator)** — the interactive session. Directs, analyzes results, decides, and
-  surfaces genuine forks to the human. Self-paces with `/loop`.
-- **Tier 2 (Driver / "brain")** — a headless `claude -p` re-invoked every cycle by a bash
-  supervisor in `tmux`. Does one concrete action per cycle, diagnoses→fixes→retries, writes real
-  output to STATUS, exits. Survives disconnects.
-- **Tier 3 (Workers)** — detached long jobs (training/eval/build) under `tmux + setsid nohup`,
-  with checkpoint + resume. Decoupled from Claude's lifecycle: Claude can crash and the job keeps running.
+> It's **not** the layer count — it's these:
 
-Tiers 1 & 2 are both Claude (the "nesting"). Going down a tier: longer time scale, more autonomy,
-less human. **They coordinate ONLY through a shared `STATUS.md`** — progress board + instruction
-board + audit log in one file.
+- 📋 **One shared `STATUS.md` as the only bus.** No tier calls another; they read/write the file.
+- 🔌 **Persistence over liveness.** Long jobs survive disconnects (`tmux + setsid nohup </dev/null`).
+- ♻️ **Restart + checkpoint-resume *is* the fault model** — not "never crash." Crashes are cheap to resume.
+- 🧊 **Fresh context per cycle.** Each `claude -p` starts clean → no context rot; `STATUS.md` carries state.
+- 🎯 **Integrity guard.** Never fabricate a gate; empty output = flush delay → re-run + cross-verify.
+- 🚦 **Single-controller rule.** Steer by editing config / writing `STATUS`, **never** by grabbing the process.
+- 🛎️ **NEEDS-USER gate.** Stop *only* for real forks (cost / irreversible / scientific fork / credential).
+- 🏁 **Completion signal + escape hatch.** Brain writes `ALL-GATES-PASSED`; supervisor has a `MAX_CYCLES` cap.
 
-## What makes it work (it's not the layer count)
+## 🚀 Quickstart
 
-- **Shared STATUS file as the single coordination bus.** No tier calls another; they read/write STATUS.
-- **Persistence over liveness.** Long jobs survive SSH drops (`tmux + setsid nohup </dev/null`).
-- **Frequent restart + checkpoint-resume as the fault model** — not "never crash".
-- **Integrity guard** — never fabricate a gate; empty output = flush delay → re-run + cross-verify.
-- **Single-controller rule** — steer by editing config / writing STATUS, NEVER by grabbing the process.
-- **NEEDS-USER gate** — only stop for real forks (cost / irreversible / scientific fork / credential);
-  otherwise keep working.
-
-Each of the [eight hard rules](skills/nested-autonomy/SKILL.md#eight-hard-rules-each-prevents-a-real-failure-we-hit)
-in the skill encodes a real failure the pattern was hardened against (SSH-drop job death, two-controller
-collisions, `pkill -f` self-kill, engine-incompatible "fixes", host-namespace orphan processes, …).
-
-## Prior art & how this differs
-
-This pattern builds on well-known ideas; it's a specific, hardened *shape* of them for **durable,
-human-supervised, mixed Claude + non-Claude (e.g. GPU) long jobs**.
-
-- **[Ralph-Wiggum loop](https://github.com/anthropics/claude-code/blob/main/plugins/ralph-wiggum/README.md)**
-  (Anthropic's official plugin) — a single in-session loop that re-feeds one prompt via a Stop hook until a
-  "completion promise", capped by `--max-iterations`. We **absorb** its two escape hatches (a completion
-  signal `ALL-GATES-PASSED` + a max-cycles cap in `supervisor.sh`) and its **fresh-context-per-cycle**
-  insight (each `claude -p` starts clean; STATUS carries the state → no context rot). We **differ** by
-  adding the Tier-1 human-supervised orchestrator, detached non-Claude workers, and full session-death
-  survival (headless + tmux, not just in-session) — so it fits multi-hour training jobs and tasks needing
-  occasional human judgment, which Ralph explicitly isn't for.
-- **[Subagents](https://code.claude.com/docs/en/agents) / [Agent Teams](https://code.claude.com/docs/en/agent-teams)
-  / dynamic Workflows** (native Claude Code) — parallel agents inside one session. Use those for in-session
-  parallel fan-out; use *this* when work must survive disconnects, run for hours, and include non-Claude
-  jobs. Different axis (durability + sequential-resume vs in-session parallelism). They compose — a Tier-2
-  cycle can spawn subagents/Workflows.
-- **[Multi-agent coordination patterns](https://claude.com/blog/multi-agent-coordination-patterns)** (Anthropic) —
-  the orchestrator-worker lineage our tiers map onto.
-- **[autonomous-agent-harness](https://github.com/affaan-m/everything-claude-code)** (ECC) — cron-triggered
-  isolated sessions bridged by persistent memory. A cron is an equally valid Tier-2 trigger to our bash
-  supervisor; same core idea — a persistent file (our STATUS) as the cross-session bridge.
-- **[Tmux-Orchestrator](https://github.com/absmartly/Tmux-Orchestrator)** — tmux-based multi-Claude orchestration.
-- **[cc-sdd](https://github.com/gotalab/cc-sdd)** — spec-driven long-running implementation; our STATUS is the
-  same "source-of-truth file" idea, generalized to any gated long task.
-
-**One-line positioning:** Ralph in a loop, but *tiered* — a human-supervised orchestrator over a headless
-self-correcting brain over detached GPU/long jobs, coordinated by one STATUS file, hardened with operational
-rules for runs that must not die on disconnect.
-
-## Install
-
-Drop the skill into your Claude Code skills directory:
+**1. Install the skill** (Claude Code auto-discovers it):
 
 ```bash
 # user-level (all projects)
-mkdir -p ~/.claude/skills
-cp -r skills/nested-autonomy ~/.claude/skills/
-
-# or project-level
-mkdir -p .claude/skills
-cp -r skills/nested-autonomy .claude/skills/
+mkdir -p ~/.claude/skills && cp -r skills/nested-autonomy ~/.claude/skills/
+# …or project-level
+mkdir -p .claude/skills && cp -r skills/nested-autonomy .claude/skills/
 ```
 
-Claude Code auto-discovers it. Verify with `/help` (skills are listed) — or just ask Claude to
-"set up nested autonomy for <task>".
+**2. Use it** — in any Claude Code session:
 
-## Usage
-
-1. In a Claude Code session, ask: *"Use nested-autonomy to drive `<my long task>`."*
-2. Claude scaffolds the three tiers from the templates: a crash-safe Tier-3 job, a `STATUS.md`,
-   a Tier-2 `prompts/driver.md` + `supervisor.sh`, and a Tier-1 `prompts/monitor.md`.
-3. It launches the brain (`tmux new-session -d -s driver 'bash supervisor.sh'`) and starts the
-   Tier-1 `/loop`.
-4. Walk away. Check back via `STATUS.md`; the human is pinged only on `NEEDS-USER` forks.
-
-The templates (`skills/nested-autonomy/templates/`) are copy-and-fill: `supervisor.sh`, `driver.md`
-(Tier-2 contract), `monitor.md` (Tier-1 loop), `STATUS.md` (coordination board).
-
-## Repo layout
-
+```text
+Use nested-autonomy to drive: <your long task>.
 ```
+
+Claude scaffolds the three tiers from the templates, launches the brain
+(`tmux new-session -d -s driver 'bash supervisor.sh'`), starts your Tier-1 `/loop`, and walks away.
+You check back via `STATUS.md`; you're pinged only on `NEEDS-USER` forks.
+
+<details>
+<summary>📦 What gets scaffolded (copy-and-fill templates)</summary>
+
+| File | Tier | Role |
+| --- | --- | --- |
+| `supervisor.sh` | 2 | brain loop: `while` + `claude -p` in tmux, with completion + max-cycles hatches |
+| `prompts/driver.md` | 2 | brain contract: integrity + authorization + env hard-rules + gated roadmap |
+| `prompts/monitor.md` | 1 | your self-paced `/loop` monitor (cache-aware pacing) |
+| `STATUS.md` | all | the shared coordination bus |
+
+</details>
+
+## 🛡️ The 8 hard rules
+
+> Each rule encodes a **real failure** this pattern was hardened against.
+
+| # | Rule | The scar it prevents |
+| --- | --- | --- |
+| 1 | 🔌 Long jobs run under `tmux + setsid nohup </dev/null` | bg jobs died on SSH drop / SIGHUP |
+| 2 | 🔎 GPU/PID is ground truth, not the log | a stale log / cwd-mistaken `GONE` looked like a dead job |
+| 3 | ♻️ Frequent restart + checkpoint-resume is the model | chasing "never crash" wastes time |
+| 4 | 🚦 Single controller — steer by config, never grab the process | two controllers collided, wasted ~40 steps |
+| 5 | 🎯 Never fabricate a gate; empty output → re-run + cross-verify | a flush delay almost got read as failure |
+| 6 | 🛎️ Only stop for real forks (NEEDS-USER) | idle-waiting on a human kills throughput |
+| 7 | 🧨 `pkill -f <pat>` self-matches → `ps` for PID, then `kill` | `pkill -f` killed the script containing the pattern |
+| 8 | ⚗️ Know your stack's incompatible "fixes" | a memory flag crashed the inference engine; host-ns orphans can't be killed in a container |
+
+## 🧬 Self-X mapping
+
+| Capability | Where it lives |
+| --- | --- |
+| 🔁 **self-drive** | Tier-2 `while` loop ("one action/cycle") + Tier-1 `/loop` self-pacing |
+| 📡 **self-feedback** | the shared `STATUS.md` — every cycle reads the latest real state and reacts |
+| 🩹 **self-correct** | brain contract: error → read logs → root-cause → fix → retry; checkpoint-resume; accreted "verified fix" notes |
+| 👁️ **self-monitor** | Tier-1 cross-verifies liveness (session + GPU + log) and watches gates |
+| 🧪 **self-analyze** | Tier-1 honest review on results (vs baseline, explain surprises, note limitations); surfaces forks |
+
+## 🔀 Prior art & positioning
+
+> Built on well-known ideas — a specific, hardened *shape* of them for **durable, human-supervised,
+> mixed Claude + non-Claude (GPU) long jobs**.
+
+| Prior work | What it is | We absorb / differ |
+| --- | --- | --- |
+| [**ralph-wiggum**](https://github.com/anthropics/claude-code/blob/main/plugins/ralph-wiggum/README.md) (Anthropic) | single in-session loop, completion-promise + max-iterations | **absorb** completion signal + max-cycles + fresh-context; **add** human tier, detached non-Claude workers, session-death survival |
+| [**subagents**](https://code.claude.com/docs/en/agents) · [**Agent Teams**](https://code.claude.com/docs/en/agent-teams) | parallel agents in one session | use those for in-session **parallelism**; use this for **durability + sequential-resume + GPU jobs** (they compose) |
+| [**multi-agent patterns**](https://claude.com/blog/multi-agent-coordination-patterns) (Anthropic) | the orchestrator-worker lineage | our tiers map onto it |
+| [**autonomous-agent-harness**](https://github.com/affaan-m/everything-claude-code) (ECC) | cron-triggered isolated sessions + memory bridge | a cron is a valid Tier-2 trigger; same "persistent file as bridge" idea |
+| [**cc-sdd**](https://github.com/gotalab/cc-sdd) · [**Tmux-Orchestrator**](https://github.com/absmartly/Tmux-Orchestrator) | spec-as-truth · tmux multi-Claude | `STATUS.md` = source-of-truth, generalized to any gated long task |
+
+## 🎖️ Origin
+
+Battle-tested end-to-end driving a real **7B GRPO video-RL** project: multi-day training, dozens of
+crash → diagnose → fix → resume cycles, OOM hunts, and a multi-stage SFT→RL pipeline — with minimal
+human input. Every hard rule above is a scar from that run.
+
+## 📁 Repo layout
+
+```text
 skills/nested-autonomy/
-├── SKILL.md                 # the skill: when/how, the 8 rules, self-X mapping, checklist
+├── SKILL.md                 # the skill: when/how, the 8 rules, self-X mapping, prior art, checklist
 └── templates/
-    ├── supervisor.sh        # Tier-2 brain loop (while-true + claude -p in tmux)
-    ├── driver.md            # Tier-2 brain contract (integrity + auth + env rules + gates)
+    ├── supervisor.sh        # Tier-2 brain loop (while + claude -p, completion + max-cycles hatches)
+    ├── driver.md            # Tier-2 brain contract
     ├── monitor.md           # Tier-1 self-paced monitor loop (/loop)
     └── STATUS.md            # the shared coordination bus
 ```
 
-## Pacing note
+## 🎛️ Pacing & cost
 
-The model prompt cache has a ~5-minute TTL, so Tier-1 wakeups are cache-aware: under ~270s when
-actively polling external state, 1200–1800s when idle (one cache miss buys a long wait). Don't sit
-at exactly 300s.
+- ⏱️ **Cache-aware pacing** — the prompt cache TTL is ~5 min: stay under ~270s when actively polling,
+  jump to 1200–1800s when idle. Don't sit at exactly 300s.
+- 💸 **Tier your models** — frontier model for Tier-1 reasoning; a cheaper model (e.g. `--model sonnet`)
+  for Tier-2 cycles and batch sub-work, where most tokens sit.
 
-## Caveats
+## ⚠️ Caveats
 
-This runs `claude -p --dangerously-skip-permissions` unattended and lets the brain edit files and
-launch jobs. Run it in a sandbox/container you control, on a task you've scoped. Batch `claude -p`
-generation shares your subscription rate limit — keep concurrency low.
+This runs `claude -p --dangerously-skip-permissions` unattended and lets the brain edit files and launch
+jobs — run it in a **sandbox/container you control**, on a **scoped** task. Batch `claude -p` shares your
+subscription rate limit; **keep concurrency low**.
 
-## License
+---
 
-MIT
+<div align="center">
+
+**License:** [MIT](LICENSE) · Built with 🪆 nesting and a lot of `STATUS.md`
+
+</div>
