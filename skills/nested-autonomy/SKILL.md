@@ -71,7 +71,7 @@ Templates live in `templates/` next to this file.
   credential) → write a `NEEDS-USER:` line, then keep doing other useful work. Never spin idle.
 - Tier 1 greps `NEEDS-USER` each cycle and surfaces it.
 
-## Eight hard rules (each prevents a real failure we hit)
+## Ten hard rules (each prevents a real failure we hit)
 1. **Persistence over liveness.** Long jobs run under `tmux + setsid nohup </dev/null` so an
    SSH drop / SIGHUP never kills them. (Scar: bg jobs died on disconnect.)
 2. **GPU/PID is ground truth, not the log.** A stale log ≠ dead job; a "GONE" relative-path
@@ -86,21 +86,38 @@ Templates live in `templates/` next to this file.
    cross-verify before concluding. Paste REAL command output for every gate; if it failed, say so.
 6. **NEEDS-USER gate: only stop for real forks.** Big cost / irreversible / scientific fork /
    missing credential. Otherwise keep working; never idle-wait for a human.
-7. **`pkill -f <pattern>` self-matches — use `ps` to get the PID, then `kill <pid>`.** A pattern
-   that also matches your own command/script kills itself mid-run. (Scar: `pkill -f` killed the
-   script that contained the pattern.)
+7. **Sentinels self-match — match them ANCHORED, never loosely.** A token you search for can also
+   match its own *mention*, firing the check by accident. Two scars, same class: (a) `pkill -f <pat>`
+   killed the very script that contained `<pat>` → use `ps` to get the PID then `kill <pid>`; (b) a
+   whole-file `grep ALL-GATES-PASSED` FALSE-COMPLETED the run the moment the brain *quoted* the marker
+   in a plan ("I'll write ALL-GATES-PASSED after the eval") → match the marker only as its own line
+   (`grep -E "^…ALL-GATES-PASSED…$"`) AND forbid the brain from typing it anywhere but the final line.
 8. **Know your stack's incompatible "fixes".** Some memory/perf flags crash specific engines
    (e.g. vLLM + `expandable_segments:True`); host-namespace orphan processes can't be killed
-   from inside a container. Record these in `driver.md` so the brain stops re-trying them.
+   from inside a container; a worker pool (Ray/torchrun/vLLM) leaves GPU-holding orphans after exit —
+   sweep them or the next run OOMs. Record these in `driver.md` so the brain stops re-trying dead ends.
+9. **Bounded autonomy — the four escape hatches are mandatory, never optional.** Completion marker +
+   `MAX_CYCLES` cap + `NEEDS-USER` pause + idle auto-stop (no progress AND nothing running). (Scar: a
+   loop with a never-matching marker and no cap spun >1 day, re-spawning `claude -p` every cycle and
+   burning quota for nothing.) Corollary: on a long run the cap WILL fire mid-task — Tier-1 restarts the
+   supervisor, gating the restart on `no live session && marker-not-written` (tmux-session presence is
+   the liveness ground truth; a stale EXIT banner in the log is not), so the detached worker loses nothing.
+10. **A gate on a small eval sample can be noise.** A tiny subset has a wide CI (≈±11pp at 70 items),
+    so a "pass", "regression", or ranking that small may not be real. Size gates adequately, or mark them
+    provisional and confirm on a larger set before concluding. (Scar: a data-ablation "regression" and a
+    "+5.7pt win" both dissolved into statistical ties when re-evaluated on a 5× larger sample.)
 
 ## Where each "self-X" lives
 - **Self-drive:** Tier-2 supervisor while-loop ("one action/cycle") + Tier-1 `/loop` self-pacing.
 - **Self-feedback:** the shared STATUS file — every cycle reads the latest real state and reacts.
 - **Self-correct:** Tier-2 contract authorizes "error → read logs → root-cause → apply best fix →
   retry"; checkpoint-resume makes crashes recoverable; script comments accrue "verified fixes".
-- **Self-monitor:** Tier-1 cross-verifies brain liveness (session+GPU+log) and watches gates.
+- **Self-monitor:** Tier-1 cross-verifies brain liveness (session+GPU+log) and watches gates. Keep
+  each `/loop` poll **self-contained** (re-derive state + carry act-on-condition logic inside it) —
+  don't rely on a persistent background watcher, the host can kill it and leave you blind.
 - **Self-analyze:** Tier-1 does an honest review on results (vs baseline, explain surprises, note
-  limitations) and writes it up; surfaces genuine forks to the human.
+  limitations + statistical significance — small samples are noisy) and writes it up; surfaces genuine
+  forks to the human.
 
 ## Relation to prior art (and when to use native features instead)
 This pattern stands on well-known ideas; use it when its specific shape (durable + human-supervised +
