@@ -1,0 +1,65 @@
+{
+  "_usage": "Setup context for the nested-autonomy skill. Claude fills these at setup (SKILL.md 5-step flow) via AskUserQuestion, then COPIES this file to <plugin_data_dir>/config.json. Replace every PLACEHOLDER value. Validate: jq . config.json. Helpers read fields via: jq -r '.work_unit.cmd' config.json, jq -r '.gates[].assert' config.json, jq -r '.models.brain' config.json.",
+  "_help": {
+    "task_name": "Short slug for this unattended run; used in tmux session names, log filenames, and scar entries. No spaces.",
+    "sandbox_path": "Absolute path to the container/dir the whole unattended run is scoped to. Nothing outside this path is touched; /freeze + careful-guard hook key off it.",
+    "work_unit.cmd": "The Tier-3 job: the single work-unit command line (one training/batch/eval step) launched by lib/launch_worker.sh.",
+    "work_unit.checkpoint_dir": "Dir where the work unit writes resumable checkpoints. Ground-truth for progress detection (newest ckpt mtime) and crash resume.",
+    "work_unit.resume": "Flag/command appended to cmd to resume from the latest checkpoint after a crash (e.g. --resume-from <latest>). Empty string if the job is idempotent/restart-from-scratch.",
+    "gates": "Ordered verification gates. Each {id,name,assert}. The run is done only when EVERY gate's assert exits 0. Never eyeball; assert is the proof.",
+    "gates[].id": "Stable machine id for the gate; referenced in STATUS.md rows and scars.md. Keep stable across runs.",
+    "gates[].name": "Human label shown in logs and STATUS.md.",
+    "gates[].assert": "Gate predicate passed verbatim to lib/assert_gate.sh; exit 0 = pass, non-zero (incl. exit-2 INDETERMINATE) = NOT passed. Forms: 'file-nonempty <path>' | 'state-changed <path>' | 'marker <file> <token>' | 'metric>=<thresh> <cmd-printing-number>' | 'session-dead <tmux-name>' | 'no-gpu-orphans <pattern>' | 'cmd <shell...>' (generic: passes iff the shell command exits 0).",
+    "models.orchestrator": "Frontier model for the Tier-1 monitor/orchestrator brain (highest capability; runs rarely, decides big moves).",
+    "models.brain": "Cheap, fast model passed to `claude -p --model <here>` for the Tier-2 driver loop. Runs every cycle, so cost matters most here.",
+    "models.batch": "Model id for Tier-3 batch/offline jobs when the work unit itself calls an LLM. May equal models.brain.",
+    "supervisor.cycle_s": "Seconds the Tier-2 supervisor sleeps between cycles. Cache-aware pacing: large enough not to spin, small enough to catch crashes.",
+    "supervisor.max_cycles": "Hard cap on supervisor cycles before forced stop. Cost/runaway guard.",
+    "supervisor.idle_stop": "Stop the supervisor after this many CONSECUTIVE no-progress cycles (checkpoint mtime unchanged). 0 disables.",
+    "batch_concurrency_cap": "Max parallel Tier-3 workers. Keep <=3 to avoid GPU/RAM thrash and orphan storms.",
+    "plugin_data_dir": "Where cross-run memory (scars.md) and the active config copy live. Default ${CLAUDE_PLUGIN_DATA:-./.nested-autonomy}.",
+    "done_marker": "Token written to STATUS.md when all gates pass. Monitors and lib/restart_supervisor.sh gate on its presence. Default ALL-GATES-PASSED."
+  },
+  "task_name": "REPLACE-me-task-slug",
+  "sandbox_path": "/REPLACE/abs/path/to/sandbox",
+  "work_unit": {
+    "cmd": "REPLACE-me: ./run_one_unit.sh --config configs/unit.yaml",
+    "checkpoint_dir": "/REPLACE/abs/path/to/checkpoints",
+    "resume": "REPLACE-me: --resume-from <latest-ckpt>"
+  },
+  "gates": [
+    {
+      "id": "gate-1-setup",
+      "name": "REPLACE-me: inputs + env present",
+      "assert": "file-nonempty /REPLACE/abs/path/to/manifest.json"
+    },
+    {
+      "id": "gate-2-progress",
+      "name": "REPLACE-me: checkpoint advanced",
+      "assert": "state-changed /REPLACE/abs/path/to/checkpoints"
+    },
+    {
+      "id": "gate-3-metric",
+      "name": "REPLACE-me: eval metric >= threshold",
+      "assert": "metric>=0.85 ./scripts/eval.sh --print-score"
+    },
+    {
+      "id": "gate-4-final",
+      "name": "REPLACE-me: done marker written",
+      "assert": "marker /REPLACE/abs/path/to/STATUS.md ALL-GATES-PASSED"
+    }
+  ],
+  "models": {
+    "orchestrator": "REPLACE-me-frontier-model-id",
+    "brain": "REPLACE-me-cheap-model-id",
+    "batch": "REPLACE-me-batch-model-id"
+  },
+  "supervisor": {
+    "cycle_s": 120,
+    "max_cycles": 200,
+    "idle_stop": 5
+  },
+  "batch_concurrency_cap": 3,
+  "plugin_data_dir": "${CLAUDE_PLUGIN_DATA:-./.nested-autonomy}",
+  "done_marker": "ALL-GATES-PASSED"
+}
