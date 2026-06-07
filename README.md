@@ -2,17 +2,21 @@
 
 # 🪆 claude-nested-autonomy
 
-### A Claude Code skill that drives **multi-hour autonomous tasks** with a 3-tier nested-Claude loop — and keeps going after your laptop sleeps.
+**Drive multi-hour autonomous tasks** with a 3-tier nested-Claude loop —<br/>
+it survives SSH drops, fixes its own crashes, and pings you only for real decisions.
 
-**Self-driving · self-correcting · self-monitoring · self-analyzing.**
-Survives SSH drops. Fixes its own crashes. Pings you only for real decisions.
+<br/>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Claude Code](https://img.shields.io/badge/Claude%20Code-Skill-d97757?logo=anthropic&logoColor=white)](https://code.claude.com)
-[![Status](https://img.shields.io/badge/status-battle--tested-success)](#-origin)
-[![Skill](https://img.shields.io/badge/type-agent%20skill-8957e5)](skills/nested-autonomy/SKILL.md)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/Young-1231/claude-nested-autonomy/pulls)
-![GitHub stars](https://img.shields.io/github/stars/Young-1231/claude-nested-autonomy?style=social)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-Skill-d97757?style=flat-square&logo=anthropic&logoColor=white)](https://code.claude.com)
+[![Status](https://img.shields.io/badge/status-battle--tested-success?style=flat-square)](#-origin)
+[![Skill](https://img.shields.io/badge/type-agent%20skill-8957e5?style=flat-square)](skills/nested-autonomy/SKILL.md)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](https://github.com/Young-1231/claude-nested-autonomy/pulls)
+[![GitHub stars](https://img.shields.io/github/stars/Young-1231/claude-nested-autonomy?style=social)](https://github.com/Young-1231/claude-nested-autonomy/stargazers)
+
+<br/>
+
+`🔁 self-driving`&nbsp;·&nbsp;`🩹 self-correcting`&nbsp;·&nbsp;`👁 self-monitoring`&nbsp;·&nbsp;`🧪 self-analyzing`
 
 </div>
 
@@ -303,6 +307,10 @@ Batch `claude -p` shares your subscription rate limit; **keep concurrency low**.
 
 <div align="center">
 
-**License:** [MIT](LICENSE) · Built with 🪆 nesting and a lot of `STATUS.md`
+**Tier 1 thinks · Tier 2 drives · Tier 3 runs — and one `STATUS.md` keeps them honest.**
+
+<sub>[MIT](LICENSE) · built with 🪆 nesting · scars earned on a multi-day 7B GRPO run</sub>
+
+<sub><a href="#-claude-nested-autonomy">↑ back to top</a></sub>
 
 </div>
